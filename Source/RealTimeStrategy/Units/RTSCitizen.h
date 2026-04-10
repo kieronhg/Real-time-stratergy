@@ -5,6 +5,7 @@
 #include "RTSCitizen.generated.h"
 
 class URTSHungerComponent;
+class URTSCitizenRoleComponent;
 
 /**
  * A citizen unit owned by the player.
@@ -22,6 +23,10 @@ public:
 	/** Hunger state — queried each tick by RTSCitizenAIController. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RTS|Citizen")
 	TObjectPtr<URTSHungerComponent> HungerComponent;
+
+	/** Role assignment — determines what this citizen does while fed and idle. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RTS|Citizen")
+	TObjectPtr<URTSCitizenRoleComponent> RoleComponent;
 
 	/** How close the citizen must be to a food source to start eating (cm). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "RTS|Citizen")

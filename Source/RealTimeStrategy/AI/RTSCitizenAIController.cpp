@@ -1,6 +1,7 @@
 #include "AI/RTSCitizenAIController.h"
 #include "Units/RTSCitizen.h"
 #include "Components/RTSHungerComponent.h"
+#include "Components/RTSCitizenRoleComponent.h"
 #include "Interfaces/RTSFoodSource.h"
 #include "Resources/RTSWildFoodResource.h"
 #include "Resources/RTSFoodStorage.h"
@@ -45,7 +46,7 @@ void ARTSCitizenAIController::Tick(float DeltaTime)
 	switch (CitizenState)
 	{
 	case ECitizenAIState::Idle:
-		// Start seeking food as soon as we are hungry (but not starving — that is handled above)
+		// Hunger takes priority over work
 		if (Hunger->IsHungry())
 		{
 			if (FindBestFoodSource())
@@ -53,6 +54,13 @@ void ARTSCitizenAIController::Tick(float DeltaTime)
 				MoveToFoodSource();
 				CitizenState = ECitizenAIState::SeekingFood;
 			}
+			break;
+		}
+
+		// Dispatch to role work while the citizen is fed
+		if (Citizen->RoleComponent)
+		{
+			Citizen->RoleComponent->TickWork(DeltaTime, this);
 		}
 		break;
 
