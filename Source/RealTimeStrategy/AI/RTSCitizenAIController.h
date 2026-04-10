@@ -11,8 +11,9 @@ UENUM(BlueprintType)
 enum class ECitizenAIState : uint8
 {
 	Idle          UMETA(DisplayName = "Idle"),
-	SeekingFood   UMETA(DisplayName = "Seeking Food"),   // walking toward a food source
+	SeekingFood   UMETA(DisplayName = "Seeking Food"),   // walking toward a food source (hungry)
 	Eating        UMETA(DisplayName = "Eating"),          // standing still, consuming food
+	Starving      UMETA(DisplayName = "Starving"),        // emergency override — drops all tasks to find food
 };
 
 /**
@@ -61,4 +62,10 @@ private:
 
 	/** Abandon the current food target and go idle. */
 	void GoIdle();
+
+	/**
+	 * Unregister from any wild food we are currently tracked against,
+	 * clear the target, and stop movement. Used before interrupting states.
+	 */
+	void AbandonCurrentFoodTarget();
 };

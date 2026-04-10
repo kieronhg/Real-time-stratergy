@@ -29,10 +29,23 @@ void ARTSCitizenAIController::Tick(float DeltaTime)
 	URTSHungerComponent* Hunger = Citizen->HungerComponent;
 	if (!Hunger) return;
 
+	// -----------------------------------------------------------------------
+	// Starvation interrupt: drop whatever we are doing and seek food immediately.
+	// Skipped if we are already handling it (Starving or Eating).
+	// -----------------------------------------------------------------------
+	if (Hunger->IsStarving() &&
+		CitizenState != ECitizenAIState::Starving &&
+		CitizenState != ECitizenAIState::Eating)
+	{
+		AbandonCurrentFoodTarget();
+		CitizenState = ECitizenAIState::Starving;
+		// Fall through to the switch so the Starving case runs this same tick.
+	}
+
 	switch (CitizenState)
 	{
 	case ECitizenAIState::Idle:
-		// Start seeking food as soon as we are hungry
+		// Start seeking food as soon as we are hungry (but not starving — that is handled above)
 		if (Hunger->IsHungry())
 		{
 			if (FindBestFoodSource())
@@ -64,6 +77,39 @@ void ARTSCitizenAIController::Tick(float DeltaTime)
 			{
 				GoIdle(); // no food anywhere right now
 			}
+			break;
+		}
+
+		// Arrived at the food source
+		if (IsWithinEatingRange())
+		{
+			StopMovement();
+			CitizenState = ECitizenAIState::Eating;
+		}
+		break;
+	}
+
+	case ECitizenAIState::Starving:
+	{
+		// Recovered above the starving threshold — downgrade to normal food-seeking or idle
+		if (!Hunger->IsStarving())
+		{
+			CitizenState = Hunger->IsHungry()
+				? ECitizenAIState::SeekingFood   // still hungry, keep heading to food
+				: ECitizenAIState::Idle;          // fully recovered
+			break;
+		}
+
+		// Target became invalid or ran out — re-search immediately (storage first, wild second)
+		AActor* Target = TargetFoodActor.Get();
+		if (!IsValid(Target) || !IRTSFoodSource::Execute_HasFood(Target))
+		{
+			AbandonCurrentFoodTarget();
+			if (FindBestFoodSource())
+			{
+				MoveToFoodSource();
+			}
+			// else: no food exists anywhere; stay in Starving and retry next tick
 			break;
 		}
 
@@ -203,20 +249,23 @@ void ARTSCitizenAIController::TickEating(float DeltaTime)
 	// Food source disappeared or ran out
 	if (!IsValid(Target) || !IRTSFoodSource::Execute_HasFood(Target))
 	{
-		if (ARTSWildFoodResource* Wild = Cast<ARTSWildFoodResource>(Target))
-		{
-			Wild->UnregisterUser();
-		}
+		AbandonCurrentFoodTarget();
 
-		// Try to find another source
+		// If still starving, re-enter the emergency state; otherwise normal seek
+		const ECitizenAIState NextSeekState = Hunger->IsStarving()
+			? ECitizenAIState::Starving
+			: ECitizenAIState::SeekingFood;
+
 		if (FindBestFoodSource())
 		{
 			MoveToFoodSource();
-			CitizenState = ECitizenAIState::SeekingFood;
+			CitizenState = NextSeekState;
 		}
 		else
 		{
-			GoIdle();
+			// No food found — go starving/idle depending on urgency
+			CitizenState = Hunger->IsStarving() ? ECitizenAIState::Starving : ECitizenAIState::Idle;
+			StopMovement();
 		}
 		return;
 	}
@@ -240,4 +289,15 @@ void ARTSCitizenAIController::GoIdle()
 	{
 		Citizen->UnitState = EUnitState::Idle;
 	}
+}
+
+void ARTSCitizenAIController::AbandonCurrentFoodTarget()
+{
+	// Unregister from any wild resource we were occupying a slot on
+	if (ARTSWildFoodResource* Wild = Cast<ARTSWildFoodResource>(TargetFoodActor.Get()))
+	{
+		Wild->UnregisterUser();
+	}
+	StopMovement();
+	TargetFoodActor.Reset();
 }
